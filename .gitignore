@@ -132,4 +132,5 @@ dmypy.json
 #my additions
 datasets/
 checkpoints/
+sanity_check/
 
