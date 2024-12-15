@@ -10,7 +10,8 @@ scene_locations = [[0,0],
                 [-200,-200]
                 ]
 
-scene_locations2 = [[0,0], 
+
+scene_locations1 = [[0,0], 
                 [0,-200],
                 [0,200],
                 [200,0],
@@ -24,7 +25,7 @@ scene_locations2 = [[0,0],
 
 
 
-scene_locations3 = [[0,0], 
+scene_locations2 = [[0,0], 
                 [200,0],
                 [-200,0],
                 [0,200],
@@ -35,7 +36,7 @@ scene_locations3 = [[0,0],
                 [-200,-200]
                 ]
 
-scene_locations4 = [[0,0], 
+scene_locations3 = [[0,0], 
                 [-200,0],
                 [200,0],
                 [0,-200],

@@ -35,11 +35,91 @@ def min_max_normalize(x):
     return (x - np.min(x)) / (np.max(x) - np.min(x))
 
 
+def makeHistogram(match_conf_im0,match_conf_im1,lowest_confidence_im0,lowest_confidence_im1):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    # Histogram for Image 0 matches
+    ax1.hist(match_conf_im0, bins=50, edgecolor='black', color='skyblue')
+    ax1.axvline(lowest_confidence_im0, color='red', linestyle='--')
+    ax1.set_title('Histogram of Confidence Scores (Anchor Matches)')
+    ax1.set_xlabel('Confidence Value')
+    ax1.set_ylabel('Frequency')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
 
-def getMasterOutout(known_image, unknown_image,threshold,visualizeMatches=False): 
+    # Histogram for Image 1 matches
+    ax2.hist(match_conf_im1, bins=50, edgecolor='black', color='lightgreen')
+    ax2.axvline(lowest_confidence_im1, color='red', linestyle='--', label='Confidence Cutoff')
+    ax2.set_title('Histogram of Confidence Scores (Query Matches)')
+    ax2.set_xlabel('Confidence Value')
+    ax2.set_ylabel('Frequency')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.show()    
+
+
+def visualize2Dmatches(conf_im0, conf_im1,matches_im0,matches_im1,view1,view2,n_viz=20):
+        
+        num_matches = matches_im0.shape[0]
+        print("Number of matches: ",num_matches)
+        match_idx_to_viz = np.round(np.linspace(0, num_matches - 1, n_viz)).astype(int)
+        viz_matches_im0, viz_matches_im1 = matches_im0[match_idx_to_viz], matches_im1[match_idx_to_viz]
+
+        image_mean = torch.as_tensor([0.5, 0.5, 0.5], device='cpu').reshape(1, 3, 1, 1)
+        image_std = torch.as_tensor([0.5, 0.5, 0.5], device='cpu').reshape(1, 3, 1, 1)
+
+        viz_imgs = []
+        for i, view in enumerate([view1, view2]):
+            rgb_tensor = view['img'] * image_std + image_mean
+            viz_imgs.append(rgb_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy())
+
+        H0, W0, H1, W1 = *viz_imgs[0].shape[:2], *viz_imgs[1].shape[:2]
+        img0 = np.pad(viz_imgs[0], ((0, max(H1 - H0, 0)), (0, 0), (0, 0)), 'constant', constant_values=0)
+        img1 = np.pad(viz_imgs[1], ((0, max(H0 - H1, 0)), (0, 0), (0, 0)), 'constant', constant_values=0)
+        img = np.concatenate((img0, img1), axis=1)
+        pl.figure()
+        pl.imshow(img)
+        cmap = pl.get_cmap('jet')
+        for i in range(n_viz):
+            (x0, y0), (x1, y1) = viz_matches_im0[i].T, viz_matches_im1[i].T
+            pl.plot([x0, x1 + W0], [y0, y1], '-+', color=cmap(i / (n_viz - 1)), scalex=False, scaley=False)
+        pl.show(block=True)
+
+
+        # Create the figure
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Plot the image
+        im = ax.imshow(img)
+        ax.set_title('Image Matches with Confidence (Anchor - left, Query - Right)')
+
+        # Create scatter plots of matches with color-coded confidence
+        scatter_im0 = ax.scatter(matches_im0[:, 0], matches_im0[:, 1], 
+                                c=conf_im0[matches_im0[:, 1], matches_im0[:, 0]], 
+                                cmap='viridis', s=10, alpha=0.7)
+        scatter_im1 = ax.scatter(matches_im1[:, 0] + W0, matches_im1[:, 1], 
+                                c=conf_im1[matches_im1[:, 1], matches_im1[:, 0]], 
+                                cmap='viridis', s=10, alpha=0.7)
+
+
+        # Create a divider for the existing axes instance
+        divider = make_axes_locatable(ax)
+
+        # Add an axes to the right of the main axes
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+
+        plt.colorbar(plt.cm.ScalarMappable(norm=plt.Normalize(vmin=conf_im0.min(), vmax=conf_im0.max()), 
+                    cmap='viridis'), cax=cax, label='Confidence')
+
+
+        plt.tight_layout()
+        plt.show()
+
+def getMasterOutout(known_image, unknown_image,n_matches,visualizeMatches=False): 
     #inputs known image and unknown image paths to return mast3r output
 
-    device = 'cuda:7'
+    device = 'cuda:5'
     schedule = 'cosine'
     lr = 0.01
     niter = 300
@@ -69,8 +149,6 @@ def getMasterOutout(known_image, unknown_image,threshold,visualizeMatches=False)
 
     desc1 = pred1['desc'].squeeze(0).detach() #local features
     desc2 = pred2['desc'].squeeze(0).detach()
-
-
 
     # find 2D-2D matches between the two images
     #feature based mapping to recover point correspdances/matches
@@ -109,163 +187,54 @@ def getMasterOutout(known_image, unknown_image,threshold,visualizeMatches=False)
     desc_conf_im0 = pred1['desc_conf'].squeeze(0).detach().cpu().numpy()
     desc_conf_im1 = pred2['desc_conf'].squeeze(0).detach().cpu().numpy()
     
-
     # Extract confidence scores for the matches
     match_conf_im0 = conf_im0[matches_im0[:, 1], matches_im0[:, 0]]
     match_conf_im1 = conf_im1[matches_im1[:, 1], matches_im1[:, 0]]
 
-    normalized_conf_im0 = min_max_normalize(conf_im0)
-    normalized_conf_im1 = min_max_normalize(conf_im1)
-
-    #print("Normalization: ", np.max(normalized_conf_im0), np.min(normalized_conf_im0))
-
-
-
-
     if visualizeMatches:
+        visualize2Dmatches(conf_im0,conf_im1,matches_im0,matches_im1,view1,view2)
 
-        # Histogram for confidence scores of matches
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-
-        # Histogram for Image 0 matches
-        ax1.hist(match_conf_im0, bins=50, edgecolor='black', color='skyblue')
-        ax1.set_title('Histogram of Confidence Scores (Image 0 Matches)')
-        ax1.set_xlabel('Confidence Value')
-        ax1.set_ylabel('Frequency')
-        ax1.grid(True, alpha=0.3)
-
-        # Histogram for Image 1 matches
-        ax2.hist(match_conf_im1, bins=50, edgecolor='black', color='lightgreen')
-        ax2.set_title('Histogram of Confidence Scores (Image 1 Matches)')
-        ax2.set_xlabel('Confidence Value')
-        ax2.set_ylabel('Frequency')
-        ax2.grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        plt.show()
-
-        # visualize a few matches
-        n_viz = 20
-        num_matches = matches_im0.shape[0]
-        print("Number of matches: ",num_matches)
-        match_idx_to_viz = np.round(np.linspace(0, num_matches - 1, n_viz)).astype(int)
-        viz_matches_im0, viz_matches_im1 = matches_im0[match_idx_to_viz], matches_im1[match_idx_to_viz]
-
-        image_mean = torch.as_tensor([0.5, 0.5, 0.5], device='cpu').reshape(1, 3, 1, 1)
-        image_std = torch.as_tensor([0.5, 0.5, 0.5], device='cpu').reshape(1, 3, 1, 1)
-
-        viz_imgs = []
-        for i, view in enumerate([view1, view2]):
-            rgb_tensor = view['img'] * image_std + image_mean
-            viz_imgs.append(rgb_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy())
-
-        H0, W0, H1, W1 = *viz_imgs[0].shape[:2], *viz_imgs[1].shape[:2]
-        img0 = np.pad(viz_imgs[0], ((0, max(H1 - H0, 0)), (0, 0), (0, 0)), 'constant', constant_values=0)
-        img1 = np.pad(viz_imgs[1], ((0, max(H0 - H1, 0)), (0, 0), (0, 0)), 'constant', constant_values=0)
-        img = np.concatenate((img0, img1), axis=1)
-        pl.figure()
-        pl.imshow(img)
-        cmap = pl.get_cmap('jet')
-        for i in range(n_viz):
-            (x0, y0), (x1, y1) = viz_matches_im0[i].T, viz_matches_im1[i].T
-            pl.plot([x0, x1 + W0], [y0, y1], '-+', color=cmap(i / (n_viz - 1)), scalex=False, scaley=False)
-        pl.show(block=True)
-
-        # Create the figure
-        fig, ax = plt.subplots(figsize=(12, 8))
-
-        # Plot the image
-        im = ax.imshow(img)
-        ax.set_title('Image Matches with Confidence')
-
-        # Create scatter plots of matches with color-coded confidence
-        scatter_im0 = ax.scatter(matches_im0[:, 0], matches_im0[:, 1], 
-                                c=normalized_conf_im0[matches_im0[:, 1], matches_im0[:, 0]], 
-                                cmap='viridis', s=10, alpha=0.7)
-        scatter_im1 = ax.scatter(matches_im1[:, 0] + W0, matches_im1[:, 1], 
-                                c=normalized_conf_im1[matches_im1[:, 1], matches_im1[:, 0]], 
-                                cmap='viridis', s=10, alpha=0.7)
-
-        # Create a divider for the existing axes instance
-        divider = make_axes_locatable(ax)
-
-        # Add an axes to the right of the main axes
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-
-        # Create colorbar with the same height as the image
-        plt.colorbar(plt.cm.ScalarMappable(norm=plt.Normalize(vmin=0, vmax=1), cmap='viridis'), 
-             cax=cax, label='Normalized Confidence')
-
-        plt.tight_layout()
-        plt.show()
-
-
-    conf_mask = (conf_im0[matches_im0[:, 1], matches_im0[:, 0]] > threshold) & \
-                (conf_im1[matches_im1[:, 1], matches_im1[:, 0]] > threshold)
-
-    # Apply the mask to filter matches and other data
-    matches_im0 = matches_im0[conf_mask] #query
-    matches_im1 = matches_im1[conf_mask] #map
-
-
-        # def get_second_most_frequent(conf):
-    #     unique, counts = np.unique(conf, return_counts=True)
-    #     sorted_indices = np.argsort(-counts)
-    #     return unique[sorted_indices[1]] if len(unique) > 1 else unique[0]
-    
-    # # Get thresholds for each image
-    # threshold_im0 = get_second_most_frequent(match_conf_im0)
-    # threshold_im1 = get_second_most_frequent(match_conf_im1)
-
-    # print("Threshold (anchor and query): ", threshold_im0, threshold_im1)
-
-    # # Apply thresholds to filter matches
-    # conf_mask_im0 = match_conf_im0 > threshold_im0
-    # conf_mask_im1 = match_conf_im1 > threshold_im1
-    # conf_mask = conf_mask_im0 & conf_mask_im1
-
-    # # Apply the mask to filter matches
-    # matches_im0 = matches_im0[conf_mask]
-    # matches_im1 = matches_im1[conf_mask]
-        
-
-    # def get_second_highest_peak(data):
-    #     hist, bin_edges = np.histogram(data, bins=50)
-    #     sorted_indices = np.argsort(hist)
-    #     second_highest_bin = sorted_indices[-2]
-    #     return bin_edges[second_highest_bin]
-    
-    # threshold_im0 = get_second_highest_peak(conf_im0[matches_im0[:, 1], matches_im0[:, 0]])
-    # threshold_im1 = get_second_highest_peak(conf_im1[matches_im1[:, 1], matches_im1[:, 0]])
-    # print("Threshold (anchor and query): ", threshold_im0, threshold_im1)
-
-    # conf_mask = (conf_im0[matches_im0[:, 1], matches_im0[:, 0]] >= threshold_im0) & \
-    #         (conf_im1[matches_im1[:, 1], matches_im1[:, 0]] >= threshold_im1)
-
-    # matches_im0 = matches_im0[conf_mask]
-    # matches_im1 = matches_im1[conf_mask]
-        
     # Sort matches by confidence scores
-    # sorted_indices_im0 = np.argsort(match_conf_im0)[::-1]
-    # sorted_indices_im1 = np.argsort(match_conf_im1)[::-1]
+    sorted_indices_im0 = np.argsort(match_conf_im0)[::-1]
+    sorted_indices_im1 = np.argsort(match_conf_im1)[::-1]
 
-    # # Select top 200 matches or all matches if fewer than 200
-    # top_matches_im0 = sorted_indices_im0[:min(300, len(sorted_indices_im0))]
-    # top_matches_im1 = sorted_indices_im1[:min(300, len(sorted_indices_im1))]
+    top_matches_im0 = sorted_indices_im0[:min(n_matches, len(sorted_indices_im0))]
+    top_matches_im1 = sorted_indices_im1[:min(n_matches, len(sorted_indices_im1))]
 
-    # # Create a mask for the union of top matches from both images
-    # conf_mask = np.zeros(len(matches_im0), dtype=bool)
-    # conf_mask[top_matches_im0] = True
-    # conf_mask[top_matches_im1] = True
+    # Find the lowest confidence score among the top n_matches
+    lowest_confidence_im0 = match_conf_im0[top_matches_im0[-1]]
+    lowest_confidence_im1 = match_conf_im1[top_matches_im1[-1]]
 
-    # # Apply the mask to filter matches
-    # matches_im0 = matches_im0[conf_mask]
-    # matches_im1 = matches_im1[conf_mask]
+    #simple thresholding
+    # conf_mask = (conf_im0[matches_im0[:, 1], matches_im0[:, 0]] > threshold) & \
+    #             (conf_im1[matches_im1[:, 1], matches_im1[:, 0]] > threshold)
 
+    # # Apply the mask to filter matches and other data
+    # matches_im0 = matches_im0[conf_mask] #query
+    # matches_im1 = matches_im1[conf_mask] #map
+
+    # Create a mask for the union of top matches from both images
+    conf_mask = np.zeros(len(matches_im0), dtype=bool)
+    conf_mask[top_matches_im0] = True
+    conf_mask[top_matches_im1] = True
+
+    # Apply the mask to filter matches
+    filtered_matches_im0 = matches_im0[conf_mask]
+    filtered_matches_im1 = matches_im1[conf_mask]
 
     print("Number of matches after conf mask: ", matches_im0.shape[0])
+
+    print("Lowest Confidence Value: ", lowest_confidence_im0, lowest_confidence_im1)
+
+    #print("Normalization: ", np.max(normalized_conf_im0), np.min(normalized_conf_im0))
     
-    return matches_im0, matches_im1, pts3d_im0, pts3d_im1, conf_im0, conf_im1, desc_conf_im0, desc_conf_im1
+
+    if visualizeMatches:
+        makeHistogram(match_conf_im0,match_conf_im1,lowest_confidence_im0,lowest_confidence_im1)
+
+
+
+    return filtered_matches_im0,filtered_matches_im1,matches_im0, matches_im1, pts3d_im0, pts3d_im1, conf_im0, conf_im1, desc_conf_im0, desc_conf_im1
 
 
 def scale_intrinsics(K: np.ndarray, prev_w: float, prev_h: float, master_w: float, master_h: float) -> np.ndarray:
@@ -304,7 +273,10 @@ def run_pnp(pts2D, pts3D, K):
 
     mode='cv2'
     """
-    print(pts3D.shape,"shape")
+
+    # print("pts3D shape:", pts3D.shape)
+    # print("pts2D shape:", pts2D.shape)
+
     success, r_pose, t_pose, _ = cv2.solvePnPRansac(pts3D, pts2D, K, None, flags=cv2.SOLVEPNP_SQPNP,
                                                     iterationsCount=10_000,
                                                     reprojectionError=3,
