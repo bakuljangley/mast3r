@@ -1,0 +1,58 @@
+{
+    "chess": {
+        "mean_pos_error": 0.28526383834310326,
+        "median_pos_error": 0.21509260190129592,
+        "mean_rot_error": 5.822773686689166,
+        "median_rot_error": 3.297909121104458,
+        "fail_count": 12,
+        "total_estimations": 18000
+    },
+    "fire": {
+        "mean_pos_error": 0.2972312852720174,
+        "median_pos_error": 0.21191162903986235,
+        "mean_rot_error": 6.4929159026088215,
+        "median_rot_error": 3.51711478874001,
+        "fail_count": 139,
+        "total_estimations": 18000
+    },
+    "heads": {
+        "mean_pos_error": 0.4942097911013595,
+        "median_pos_error": 0.2601621575225639,
+        "mean_rot_error": 18.08455609965128,
+        "median_rot_error": 3.3381330785685774,
+        "fail_count": 693,
+        "total_estimations": 9000
+    },
+    "office": {
+        "mean_pos_error": 1.1413107688076012,
+        "median_pos_error": 0.38032344226267684,
+        "mean_rot_error": 47.0575369208118,
+        "median_rot_error": 6.879675468680296,
+        "fail_count": 2216,
+        "total_estimations": 36000
+    },
+    "pumpkin": {
+        "mean_pos_error": 0.47130502896248744,
+        "median_pos_error": 0.29705319209305653,
+        "mean_rot_error": 10.598905922782556,
+        "median_rot_error": 5.369697440373678,
+        "fail_count": 1177,
+        "total_estimations": 18000
+    },
+    "redkitchen": {
+        "mean_pos_error": 0.6594856245389251,
+        "median_pos_error": 0.2820383220548822,
+        "mean_rot_error": 19.15220745509096,
+        "median_rot_error": 5.54544026068235,
+        "fail_count": 2886,
+        "total_estimations": 45000
+    },
+    "stairs": {
+        "mean_pos_error": 0.9847348900542898,
+        "median_pos_error": 0.5948560501542058,
+        "mean_rot_error": 26.71993086287639,
+        "median_rot_error": 9.246262865608738,
+        "fail_count": 22,
+        "total_estimations": 9000
+    }
+}

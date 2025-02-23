@@ -1,0 +1,52 @@
+{
+    "overall": {
+        "Translation Mean": 0.3492874578942204,
+        "Translation Median": 0.2837809755469899,
+        "Rotation Mean": 14.380819892514431,
+        "Rotation Median": 12.91362954416708
+    },
+    "scenes": {
+        "fire": {
+            "Translation Mean": 0.33759831625529924,
+            "Translation Median": 0.31837404886988085,
+            "Rotation Mean": 15.61621821256758,
+            "Rotation Median": 14.400601547168232
+        },
+        "office": {
+            "Translation Mean": 0.34858986701317585,
+            "Translation Median": 0.30623460904743216,
+            "Rotation Mean": 12.211656356058084,
+            "Rotation Median": 11.440704971174249
+        },
+        "chess": {
+            "Translation Mean": 0.24909750025856653,
+            "Translation Median": 0.22522114176508035,
+            "Rotation Mean": 12.966786800291397,
+            "Rotation Median": 12.365949620853279
+        },
+        "heads": {
+            "Translation Mean": 0.2520367972916956,
+            "Translation Median": 0.1921049404807354,
+            "Rotation Mean": 18.653347651932165,
+            "Rotation Median": 17.13720599591898
+        },
+        "stairs": {
+            "Translation Mean": 0.33269641197483163,
+            "Translation Median": 0.25863209530484205,
+            "Rotation Mean": 13.890718759294916,
+            "Rotation Median": 13.94715943638447
+        },
+        "redkitchen": {
+            "Translation Mean": 0.38346617471116795,
+            "Translation Median": 0.30766012433378925,
+            "Rotation Mean": 14.997014903799485,
+            "Rotation Median": 13.21214984305457
+        },
+        "pumpkin": {
+            "Translation Mean": 0.4340358001494724,
+            "Translation Median": 0.3626509261970459,
+            "Rotation Mean": 15.466080896285252,
+            "Rotation Median": 13.052184527697175
+        }
+    }
+}

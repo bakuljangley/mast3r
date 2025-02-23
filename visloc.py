@@ -76,6 +76,8 @@ def coarse_matching(query_view, map_view, model, device, pixel_tol, fast_nn_para
     for idx, img in enumerate([query_view['rgb_rescaled'], map_view['rgb_rescaled']]):
         imgs.append(dict(img=img.unsqueeze(0), true_shape=np.int32([img.shape[1:]]),
                          idx=idx, instance=str(idx)))
+        
+
     output = inference([tuple(imgs)], model, device, batch_size=1, verbose=False)
     pred1, pred2 = output['pred1'], output['pred2']
     conf_list = [pred1['desc_conf'].squeeze(0).cpu().numpy(), pred2['desc_conf'].squeeze(0).cpu().numpy()]
@@ -85,7 +87,7 @@ def coarse_matching(query_view, map_view, model, device, pixel_tol, fast_nn_para
     PQ, PM = desc_list[0], desc_list[1]
     if len(PQ) == 0 or len(PM) == 0:
         return [], [], [], []
-
+    print(PQ.shape)
     if pixel_tol == 0:
         matches_im_map, matches_im_query = fast_reciprocal_NNs(PM, PQ, subsample_or_initxy1=8, **fast_nn_params)
         HM, WM = map_view['rgb_rescaled'].shape[1:]
@@ -253,6 +255,7 @@ def crop(img, mask, pts3d, crop, intrinsics=None):
 
 
 def resize_image_to_max(max_image_size, rgb, K):
+    #essentially resizes image to max resolution
     W, H = rgb.size
     if max_image_size and max(W, H) > max_image_size:
         islandscape = (W >= H)

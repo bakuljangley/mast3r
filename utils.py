@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import csv
 import os
 from PIL import Image
-
+from scipy.spatial.transform import Rotation as R
 import folium
 from folium.plugins import MarkerCluster
 import base64
@@ -34,7 +34,19 @@ from io import BytesIO
 from IPython.display import display
 
 
-
+def computePoseError(est_pose, gt_pose):
+    # Compute positional error
+    pos_error = np.linalg.norm(est_pose[:3, 3] - gt_pose[:3, 3])
+    est_quat = R.from_matrix(est_pose[:3, :3]).as_quat()
+    gt_quat = R.from_matrix(gt_pose[:3, :3]).as_quat()
+    est_quat = np.concatenate(([est_quat[3]], est_quat[:3]))
+    gt_quat = np.concatenate(([gt_quat[3]], gt_quat[:3]))
+    # Compute the quaternion dot product and account for double covering.
+    dot = np.clip(np.abs(np.dot(est_quat, gt_quat)), -1.0, 1.0)
+    theta = 2 * np.arccos(dot)
+    rot_error = np.degrees(theta)
+    
+    return pos_error, rot_error
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
@@ -124,26 +136,26 @@ def visualize2Dmatches(conf_im0, conf_im1,matches_im0,matches_im1,view1,view2,n_
         plt.tight_layout()
         plt.show()
 
-def getMasterOutout(anchor_image, query_image,n_matches,visualizeMatches=False): 
+def getMasterOutout(model,device, anchor_image, query_image, n_matches,visualizeMatches=False,verboseFlag=True): 
     #inputs known image and unknown image paths to return mast3r output
 
-    device = 'cuda:5'
-    schedule = 'cosine'
-    lr = 0.01
-    niter = 300
-    boarder = 3
+    # device = 'cuda:1'
+    # schedule = 'cosine'
+    # lr = 0.01
+    # niter = 300
+    
 
-    model_name = "naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
-    # you can put the path to a local checkpoint in model_name if needed
-    ##load model and run inference
-    model = AsymmetricMASt3R.from_pretrained(model_name).to(device)
-    images = load_images([anchor_image, query_image], size=512)
+    # model_name = "naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
+    # # you can put the path to a local checkpoint in model_name if needed
+    # ##load model and run inference
+    # model = AsymmetricMASt3R.from_pretrained(model_name).to(device)
+    images = load_images([anchor_image, query_image], size=512,verbose=verboseFlag)
     #print("Images shape: ",images[1]['true_shape'])
     mast3r_inference_start = time.time()
     output = inference([tuple(images)], model, device, batch_size=1, verbose=False)
     mast3r_inference_stop = time.time()
     mast3r_inference_time = mast3r_inference_stop-mast3r_inference_start
-    print(f"Mast3r Inference Time: {mast3r_inference_time:.4f} seconds.")
+    
     # at this stage, you have the raw dust3r predictions 
     #dust3r predictions are the original two heads outputing 3d point cloud and confidence
     #master adds another that includes an additional head for local features
@@ -165,11 +177,16 @@ def getMasterOutout(anchor_image, query_image,n_matches,visualizeMatches=False):
                                                     device=device, dist='dot', block_size=2**13)
     point_matches_stop = time.time()
     point_matches_time = point_matches_stop-point_matches_start
-    print(f"Point Matches Time: {point_matches_time:.4f} seconds.")
-    
 
+    if verboseFlag:
+        print(f"Mast3r Inference Time: {mast3r_inference_time:.4f} seconds.")
+        print(f"Point Matches Time: {point_matches_time:.4f} seconds.")
+    
+    # print("matches 0", matches_im0, matches_im0.shape)
+    # print("matches 1", matches_im1, matches_im1.shape)
     ignore = 0 #to ignore correspondances in the lower half of the image
     # ignore small border around the edge
+    boarder = 3
     H0, W0 = view1['true_shape'][0]
     valid_matches_im0 = (matches_im0[:, 0] >= boarder) & (matches_im0[:, 0] < int(W0) - boarder) & (
         matches_im0[:, 1] >= boarder) & (matches_im0[:, 1] < int(H0) - boarder -ignore)
@@ -202,16 +219,16 @@ def getMasterOutout(anchor_image, query_image,n_matches,visualizeMatches=False):
     if visualizeMatches:
         visualize2Dmatches(conf_im0,conf_im1,matches_im0,matches_im1,view1,view2)
 
-    # Sort matches by confidence scores
-    sorted_indices_im0 = np.argsort(match_conf_im0)[::-1]
-    sorted_indices_im1 = np.argsort(match_conf_im1)[::-1]
+    # # Sort matches by confidence scores-- find the indices of the confidence
+    # sorted_indices_im0 = np.argsort(match_conf_im0)[::-1]
+    # sorted_indices_im1 = np.argsort(match_conf_im1)[::-1]
 
-    top_matches_im0 = sorted_indices_im0[:min(n_matches, len(sorted_indices_im0))]
-    top_matches_im1 = sorted_indices_im1[:min(n_matches, len(sorted_indices_im1))]
+    # top_matches_im0 = sorted_indices_im0[:min(n_matches, len(sorted_indices_im0))] 
+    # top_matches_im1 = sorted_indices_im1[:min(n_matches, len(sorted_indices_im1))]
 
-    # Find the lowest confidence score among the top n_matches
-    lowest_confidence_im0 = match_conf_im0[top_matches_im0[-1]]
-    lowest_confidence_im1 = match_conf_im1[top_matches_im1[-1]]
+    # # Find the lowest confidence score among the top n_matches
+    # lowest_confidence_im0 = match_conf_im0[top_matches_im0[-1]]
+    # lowest_confidence_im1 = match_conf_im1[top_matches_im1[-1]]
 
     #simple thresholding
     # conf_mask = (conf_im0[matches_im0[:, 1], matches_im0[:, 0]] > threshold) & \
@@ -222,23 +239,44 @@ def getMasterOutout(anchor_image, query_image,n_matches,visualizeMatches=False):
     # matches_im1 = matches_im1[conf_mask] #map
 
     # Create a mask for the union of top matches from both images
+    # conf_mask = np.zeros(len(matches_im0), dtype=bool)
+    # conf_mask[top_matches_im0] = True
+    # conf_mask[top_matches_im1] = True
+
+    # # Apply the mask to filter matches
+    # filtered_matches_im0 = matches_im0[conf_mask]
+    # filtered_matches_im1 = matches_im1[conf_mask]
+
+    # Calculate combined confidence scores
+    combined_conf = np.minimum(match_conf_im0, match_conf_im1)
+
+    # Sort the combined confidence scores
+    sorted_indices = np.argsort(combined_conf)[::-1]
+
+    # Select top n_matches indices
+    top_indices = sorted_indices[:n_matches]
+
+    # Create a mask for the top matches
     conf_mask = np.zeros(len(matches_im0), dtype=bool)
-    conf_mask[top_matches_im0] = True
-    conf_mask[top_matches_im1] = True
+    conf_mask[top_indices] = True
 
     # Apply the mask to filter matches
     filtered_matches_im0 = matches_im0[conf_mask]
     filtered_matches_im1 = matches_im1[conf_mask]
 
-    print("Number of matches after confidence mask: ", filtered_matches_im0.shape[0])
+    # lowest_confidence_im0 = match_conf_im0[filtered_matches_im0].min()
+    # lowest_confidence_im1 = match_conf_im1[filtered_matches_im0].min()
 
-    print("Lowest Confidence Value: ", lowest_confidence_im0, lowest_confidence_im1)
+    if verboseFlag:
+        print("Number of matches after confidence mask: ", filtered_matches_im0.shape[0])
 
-    #print("Normalization: ", np.max(normalized_conf_im0), np.min(normalized_conf_im0))
+    # print("Lowest Confidence Value: ", lowest_confidence_im0, lowest_confidence_im1)
+
+    # #print("Normalization: ", np.max(normalized_conf_im0), np.min(normalized_conf_im0))
     
 
-    if visualizeMatches:
-        makeHistogram(match_conf_im0,match_conf_im1,lowest_confidence_im0,lowest_confidence_im1)
+    # if visualizeMatches:
+    #     makeHistogram(match_conf_im0,match_conf_im1,lowest_confidence_im0,lowest_confidence_im1)
 
 
 
@@ -259,8 +297,8 @@ def scale_intrinsics(K: np.ndarray, prev_w: float, prev_h: float, master_w: floa
 
     assert K.shape == (3, 3), f"Expected (3, 3), but got {K.shape=}"
 
-    scale_w = master_w / prev_w  # sizes of the images in the Mast3r dataset
-    scale_h = master_h / prev_h  # sizes of the images in the Mast3r dataset
+    scale_w = master_w / prev_w  
+    scale_h = master_h / prev_h  
 
     K_scaled = K.copy()
     K_scaled[0, 0] *= scale_w
@@ -283,26 +321,26 @@ def cameraMatrixMapillary(focal,width,height): #converting open sfm intrinsics t
     return K
 
 def run_pnp(pts2D, pts3D, K, distortion=None): 
-    """
-    intrinsics= K
-
-    mode='cv2'
-    """
-
     # print("pts3D shape:", pts3D.shape)
-    # print("pts2D shape:", pts2D.shape)
-
-    success, r_pose, t_pose, _ = cv2.solvePnPRansac(pts3D, pts2D, K, distortion, flags=cv2.SOLVEPNP_SQPNP,
-                                                    iterationsCount=10_000,
-                                                    reprojectionError=3,
-                                                    confidence=0.9999) #returns 3d to 2d transfromation, known to unknown 
-    if not success:
-        print("Failed to find transform")
+    if pts3D.shape[0]<=3:
+        print("Insufficient Points.")
         return False, None
-    r_pose = cv2.Rodrigues(r_pose)[0]  # world2cam == world2cam2
-    RT = np.r_[np.c_[r_pose, t_pose], [(0,0,0,1)]] # world2cam2 #anchor to query
+    # print("pts2D shape:", pts2D.shape)
+    try:
+        success, r_pose, t_pose, _ = cv2.solvePnPRansac(pts3D, pts2D, K, distortion, flags=cv2.SOLVEPNP_SQPNP,
+                                                        iterationsCount=10_000,
+                                                        reprojectionError=3,
+                                                        confidence=0.9999) #returns 3d to 2d transfromation #anchor to query
+        if not success:
+            print("Failed to find transform")
+            return False, None
+        r_pose = cv2.Rodrigues(r_pose)[0]  # world2cam == world2cam2
+        RT = np.r_[np.c_[r_pose, t_pose], [(0,0,0,1)]] # world2cam2 #anchor to query
 
-    return True, np.linalg.inv(RT)  # cam2toworld #query to world
+        return True, np.linalg.inv(RT)   #query to anchor
+    except Exception as e:
+        print(f"Error details: {str(e)}")
+        return False, None
 
 def get_rotation_from_compass(compass_angle):
     """ Create a rotation matrix based on compass angle (in radians). """
@@ -337,6 +375,7 @@ def pnp_to_relative_global_coords(pnp_rotation, pnp_translation, ref_lat, ref_lo
     query_camera_in_anchor_frame = R_cam_to_world  @ pnp_translation
 
     query_camera_position = np.linalg.inv(compass_rotation) @  query_camera_in_anchor_frame
+    # print(query_camera_position)
 
 
     # Add this position to the reference UTM coordinates
